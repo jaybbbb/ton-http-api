@@ -20,8 +20,8 @@ from loguru import logger
 
 
 class TonlibWorker(mp.Process):
-    def __init__(self, 
-                 ls_index: int, 
+    def __init__(self,
+                 ls_index: int,
                  tonlib_settings: TonlibSettings,
                  input_queue: Optional[mp.Queue]=None,
                  output_queue: Optional[mp.Queue]=None):
@@ -81,7 +81,7 @@ class TonlibWorker(mp.Process):
 
     def shutdown(self, code: int):
         self.exit_event.set()
-        
+
         for task in self.tasks.values():
             task.cancel()
             try:
@@ -120,7 +120,7 @@ class TonlibWorker(mp.Process):
 
             if self.timeout_count >= 10:
                 raise RuntimeError(f'TonlibWorker #{self.ls_index:03d} got {self.timeout_count} timeouts in report_last_block')
-            
+
             self.last_block = last_block
             await self.loop.run_in_executor(self.threadpool_executor, self.output_queue.put, (TonlibWorkerMsgType.LAST_BLOCK_UPDATE, self.last_block))
             await asyncio.sleep(1)
@@ -134,10 +134,10 @@ class TonlibWorker(mp.Process):
                 self.is_archival = False
             except TonlibException as e:
                 logger.error("TonlibWorker #{ls_index:03d} report_archival exception of type {exc_type}: {exc}", ls_index=self.ls_index, exc_type=type(e).__name__, exc=e)
-            
+
             await self.loop.run_in_executor(self.threadpool_executor, self.output_queue.put, (TonlibWorkerMsgType.ARCHIVAL_UPDATE, self.is_archival))
             await asyncio.sleep(600)
-        
+
     async def main_loop(self):
         while not self.exit_event.is_set():
             try:
@@ -157,7 +157,7 @@ class TonlibWorker(mp.Process):
                 result = await self.tonlib.__getattribute__(method)(*args, **kwargs)
             except Exception as e:
                 exception = e
-                logger.warning("TonlibWorker #{ls_index:03d} raised exception of type {exc_type} while executing task. Method: {method}, args: {args}, kwargs: {kwargs}, exception: {exc}", 
+                logger.warning("TonlibWorker #{ls_index:03d} raised exception of type {exc_type} while executing task. Method: {method}, args: {args}, kwargs: {kwargs}, exception: {exc}",
                     ls_index=self.ls_index, method=method, args=args, kwargs=kwargs, exc_type=type(e).__name__, exc=e)
             else:
                 logger.debug("TonlibWorker #{ls_index:03d} got result {method} for task '{task_id}'", ls_index=self.ls_index, method=method, task_id=task_id)
@@ -178,7 +178,10 @@ class TonlibWorker(mp.Process):
         await self.loop.run_in_executor(self.threadpool_executor, self.output_queue.put, (TonlibWorkerMsgType.TASK_RESULT, tonlib_task_result))
 
     async def sync_tonlib(self):
-        await self.tonlib.sync_tonlib()
+        try:
+            await self.tonlib.sync_tonlib()
+        except Exception as e:
+            logger.error("TonLibSync error exception: {exc}", exc=e)
 
         while not self.exit_event.is_set():
             await asyncio.sleep(1)
